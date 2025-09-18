@@ -23,11 +23,25 @@ class Bootstrap
     {
         error_log('[DRS] Bootstrap init');
 
+        add_action('before_woocommerce_init', [$this, 'declareWooCommerceCompatibility']);
         add_action('plugins_loaded', [$this, 'load_textdomain']);
         add_filter('woocommerce_shipping_methods', [$this, 'register_shipping_method']);
         add_action('init', [$this, 'wire_admin_blocks_loader']);
         add_action('init', [$this, 'wire_frontend_blocks_loader']);
         add_action('rest_api_init', [$this, 'wire_rest_blocks_loader']);
+    }
+
+    public function declareWooCommerceCompatibility(): void
+    {
+        if (! class_exists('\\Automattic\\WooCommerce\\Utilities\\FeaturesUtil')) {
+            return;
+        }
+
+        \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility(
+            'custom_order_tables',
+            $this->pluginFile,
+            true
+        );
     }
 
     public function load_textdomain(): void
