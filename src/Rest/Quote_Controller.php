@@ -10,6 +10,7 @@ declare( strict_types=1 );
 namespace DRS\Rest;
 
 use DRS\Settings\Settings;
+use DRS\Shipping\Calculator;
 use DRS\Support\Logger;
 use WP_Error;
 use WP_REST_Request;
@@ -23,6 +24,10 @@ use function sanitize_text_field;
 use function get_transient;
 use function set_transient;
 use function wp_json_encode;
+
+if ( ! class_exists( '\\DRS\\Shipping\\Calculator', false ) ) {
+    require_once dirname( __DIR__ ) . '/Shipping/Calculator.php';
+}
 
 /**
  * Handles the /drs/v1/quote endpoint.
@@ -82,24 +87,36 @@ class Quote_Controller {
             );
         }
 
-        $distance    = $this->to_non_negative_float( $raw_distance );
-        $weight      = $this->to_non_negative_float( $request->get_param( 'weight' ) );
-        $items       = $this->to_non_negative_int( $request->get_param( 'items' ) );
-        $subtotal    = $this->to_non_negative_float( $request->get_param( 'subtotal' ) );
         $origin      = sanitize_text_field( (string) $request->get_param( 'origin' ) );
         $destination = sanitize_text_field( (string) $request->get_param( 'destination' ) );
 
-        $settings     = Settings::get_settings();
-        $rules        = $settings['rules'];
-        $handling_fee = isset( $settings['handling_fee'] ) ? (float) $settings['handling_fee'] : 0.0;
-        $default_rate = isset( $settings['default_rate'] ) ? (float) $settings['default_rate'] : 0.0;
-        $provider     = $this->determine_provider( $settings );
+        $normalized = Calculator::normalize_inputs(
+            array(
+                'distance'    => $raw_distance,
+                'weight'      => $request->get_param( 'weight' ),
+                'items'       => $request->get_param( 'items' ),
+                'subtotal'    => $request->get_param( 'subtotal' ),
+                'origin'      => $origin,
+                'destination' => $destination,
+            )
+        );
+
+        $settings = Settings::get_settings();
+        $provider = $this->determine_provider( $settings );
 
         $cache_hit = false;
         $cache_key = null;
 
         if ( $this->is_cache_enabled( $settings ) ) {
-            $cache_key = $this->build_cache_key( $settings, $distance, $weight, $items, $subtotal, $origin, $destination );
+            $cache_key = $this->build_cache_key(
+                $settings,
+                $normalized['distance'],
+                $normalized['weight'],
+                $normalized['items'],
+                $normalized['subtotal'],
+                $normalized['origin'],
+                $normalized['destination']
+            );
             $cached    = get_transient( $cache_key );
 
             if ( is_array( $cached ) && isset( $cached['response'] ) ) {
@@ -120,67 +137,27 @@ class Quote_Controller {
             }
         }
 
-        $selected_rule = null;
-        $rule_cost     = $default_rate;
+        $result = Calculator::calculate( $normalized, $settings );
 
-        foreach ( $rules as $rule ) {
-            if ( ! is_array( $rule ) ) {
-                continue;
-            }
-
-            $min_distance = isset( $rule['min_distance'] ) ? (float) $rule['min_distance'] : 0.0;
-            $max_raw      = $rule['max_distance'] ?? '';
-            $max_distance = '' === $max_raw || null === $max_raw ? null : (float) $max_raw;
-
-            if ( $distance < $min_distance ) {
-                continue;
-            }
-
-            if ( null !== $max_distance && $distance > $max_distance ) {
-                continue;
-            }
-
-            $base_cost    = isset( $rule['base_cost'] ) ? (float) $rule['base_cost'] : 0.0;
-            $per_distance = isset( $rule['cost_per_distance'] ) ? (float) $rule['cost_per_distance'] : 0.0;
-
-            $rule_cost = $base_cost + ( $per_distance * $distance );
-            $selected_rule = array(
-                'id'                => isset( $rule['id'] ) ? (string) $rule['id'] : '',
-                'label'             => isset( $rule['label'] ) ? (string) $rule['label'] : '',
-                'min_distance'      => $min_distance,
-                'max_distance'      => $max_distance,
-                'base_cost'         => $base_cost,
-                'cost_per_distance' => $per_distance,
-                'calculated_cost'   => round( $rule_cost, 2 ),
-            );
-            break;
-        }
-
-        $total = round( $rule_cost + $handling_fee, 2 );
-
-        $cost_components = array(
-            'rule_cost'    => round( $rule_cost, 2 ),
-            'handling_fee' => round( $handling_fee, 2 ),
-            'total'        => $total,
-        );
+        $selected_rule   = $result['rule'];
+        $cost_components = $result['breakdown'];
 
         $response = array(
-            'origin'          => $origin,
-            'destination'     => $destination,
-            'distance'        => $distance,
-            'distance_unit'   => $settings['distance_unit'] ?? 'km',
-            'weight'          => $weight,
-            'items'           => $items,
-            'subtotal'        => $subtotal,
-            'handling_fee'    => round( $handling_fee, 2 ),
-            'default_rate'    => round( $default_rate, 2 ),
-            'total'           => $total,
+            'origin'          => $result['origin'],
+            'destination'     => $result['destination'],
+            'distance'        => $result['distance'],
+            'distance_unit'   => $result['distance_unit'],
+            'weight'          => $result['weight'],
+            'items'           => $result['items'],
+            'subtotal'        => $result['subtotal'],
+            'handling_fee'    => $result['handling_fee'],
+            'default_rate'    => $result['default_rate'],
+            'total'           => $result['total'],
             'currency_symbol' => Settings::get_currency_symbol(),
-            'used_fallback'   => null === $selected_rule,
+            'used_fallback'   => $result['used_fallback'],
+            'rule'            => $selected_rule,
+            'breakdown'       => $cost_components,
         );
-
-        $response['rule']       = $selected_rule;
-        $response['breakdown']  = $cost_components;
 
         if ( null !== $cache_key ) {
             $ttl = $this->get_cache_ttl( $settings );
@@ -246,44 +223,6 @@ class Quote_Controller {
                 'required' => false,
             ),
         );
-    }
-
-    /**
-     * Cast a value to a non-negative float.
-     *
-     * @param mixed $value Raw value.
-     */
-    private function to_non_negative_float( $value ): float {
-        if ( null === $value || '' === $value ) {
-            return 0.0;
-        }
-
-        if ( is_string( $value ) ) {
-            $value = str_replace( ',', '.', $value );
-        }
-
-        if ( ! is_numeric( $value ) ) {
-            return 0.0;
-        }
-
-        return max( 0.0, (float) $value );
-    }
-
-    /**
-     * Cast a value to a non-negative integer.
-     *
-     * @param mixed $value Raw value.
-     */
-    private function to_non_negative_int( $value ): int {
-        if ( null === $value || '' === $value ) {
-            return 0;
-        }
-
-        if ( is_string( $value ) && ! is_numeric( $value ) ) {
-            return 0;
-        }
-
-        return max( 0, (int) $value );
     }
 
     /**

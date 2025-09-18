@@ -203,6 +203,16 @@ class Bootstrap {
             }
         }
 
+        $calculator_class = '\\DRS\\Shipping\\Calculator';
+
+        if ( ! class_exists( $calculator_class, false ) ) {
+            $calculator_file = dirname( $this->plugin_file ) . '/src/Shipping/Calculator.php';
+
+            if ( is_readable( $calculator_file ) ) {
+                require_once $calculator_file;
+            }
+        }
+
         $logger_class = '\\DRS\\Support\\Logger';
 
         if ( ! class_exists( $logger_class, false ) ) {

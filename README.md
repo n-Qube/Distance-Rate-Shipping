@@ -8,7 +8,7 @@ The plugin is not yet feature complete. It registers the `drs_distance_rate` shi
 
 ## Implemented components
 
-* **Shipping method registration.** The plugin wires the `drs_distance_rate` shipping method into WooCommerce and supports zone/instance configuration, although the rate calculator currently adds a demo rate only.
+* **Shipping method registration.** The plugin wires the `drs_distance_rate` shipping method into WooCommerce, evaluates saved rules plus handling fees, and supports zone/instance configuration.
 * **Admin settings experience.** A dedicated settings screen (WooCommerce → Distance Rate) exposes General, Rules, Origins, and Advanced tabs with fields for enabling the method, naming it, defining a fallback/handling fee, and toggling debug logging.
 * **Rule and origin editors.** Rules capture a label, min/max distance, base charge, and cost per distance unit, while origins store simple address data; both tables are managed via the bundled admin JavaScript that persists JSON back into the settings option.
 * **Rate preview calculator.** The admin interface includes a calculator widget that calls the REST API so store managers can test how a distance, weight, item count, and subtotal interact with stored rules and handling fees.
@@ -21,7 +21,6 @@ The plugin is not yet feature complete. It registers the `drs_distance_rate` shi
 The following capabilities are not yet implemented:
 
 * Automatic distance lookups (straight-line or road distance) or integrations with mapping APIs.
-* Real rate calculations during checkout; the current `calculate_shipping` method always returns a zero-cost demo rate.
 * Rich rule conditions (per-weight, per-item, subtotal thresholds, shipping class/category filters, free-delivery triggers) beyond the basic distance matrix saved today.
 * CSV/JSON import or export wired into the admin UI (support classes exist but are not hooked up yet).
 * WooCommerce Blocks integrations, customer-facing distance displays, or multisite-specific logic.
