@@ -10,13 +10,18 @@ declare( strict_types=1 );
 namespace DRS\Rest;
 
 use DRS\Settings\Settings;
+use DRS\Shipping\Rate_Calculator;
 use WP_Error;
 use WP_REST_Request;
-use function register_rest_route;
 use function current_user_can;
+use function register_rest_route;
 use function rest_authorization_required_code;
 use function rest_ensure_response;
 use function sanitize_text_field;
+
+if ( ! class_exists( '\\DRS\\Shipping\\Rate_Calculator', false ) && is_readable( dirname( __DIR__ ) . '/Shipping/Rate_Calculator.php' ) ) {
+    require_once dirname( __DIR__ ) . '/Shipping/Rate_Calculator.php';
+}
 
 /**
  * Handles the /drs/v1/quote endpoint.
@@ -83,40 +88,9 @@ class Quote_Controller {
         $origin      = sanitize_text_field( (string) $request->get_param( 'origin' ) );
         $destination = sanitize_text_field( (string) $request->get_param( 'destination' ) );
 
-        $settings     = Settings::get_settings();
-        $rules        = $settings['rules'];
-        $handling_fee = isset( $settings['handling_fee'] ) ? (float) $settings['handling_fee'] : 0.0;
-        $default_rate = isset( $settings['default_rate'] ) ? (float) $settings['default_rate'] : 0.0;
-
-        $matched_rule = null;
-        $rule_cost    = $default_rate;
-
-        foreach ( $rules as $rule ) {
-            if ( ! is_array( $rule ) ) {
-                continue;
-            }
-
-            $min_distance = isset( $rule['min_distance'] ) ? (float) $rule['min_distance'] : 0.0;
-            $max_raw      = $rule['max_distance'] ?? '';
-            $max_distance = '' === $max_raw || null === $max_raw ? null : (float) $max_raw;
-
-            if ( $distance < $min_distance ) {
-                continue;
-            }
-
-            if ( null !== $max_distance && $distance > $max_distance ) {
-                continue;
-            }
-
-            $matched_rule = $rule;
-            $base_cost    = isset( $rule['base_cost'] ) ? (float) $rule['base_cost'] : 0.0;
-            $per_distance = isset( $rule['cost_per_distance'] ) ? (float) $rule['cost_per_distance'] : 0.0;
-
-            $rule_cost = $base_cost + ( $per_distance * $distance );
-            break;
-        }
-
-        $total = round( $rule_cost + $handling_fee, 2 );
+        $settings   = Settings::get_settings();
+        $calculator = new Rate_Calculator();
+        $quote      = $calculator->calculate( $settings, $distance, $weight, $items, $subtotal );
 
         $response = array(
             'origin'          => $origin,
@@ -126,33 +100,17 @@ class Quote_Controller {
             'weight'          => $weight,
             'items'           => $items,
             'subtotal'        => $subtotal,
-            'handling_fee'    => round( $handling_fee, 2 ),
-            'default_rate'    => round( $default_rate, 2 ),
-            'total'           => $total,
+            'handling_fee'    => $quote['handling_fee'],
+            'default_rate'    => $quote['default_rate'],
+            'total'           => $quote['total'],
             'currency_symbol' => Settings::get_currency_symbol(),
-            'used_fallback'   => null === $matched_rule,
-        );
-
-        if ( null !== $matched_rule ) {
-            $max_raw = $matched_rule['max_distance'] ?? '';
-
-            $response['rule'] = array(
-                'id'                => isset( $matched_rule['id'] ) ? (string) $matched_rule['id'] : '',
-                'label'             => isset( $matched_rule['label'] ) ? (string) $matched_rule['label'] : '',
-                'min_distance'      => isset( $matched_rule['min_distance'] ) ? (float) $matched_rule['min_distance'] : 0.0,
-                'max_distance'      => '' === $max_raw || null === $max_raw ? null : (float) $max_raw,
-                'base_cost'         => isset( $matched_rule['base_cost'] ) ? (float) $matched_rule['base_cost'] : 0.0,
-                'cost_per_distance' => isset( $matched_rule['cost_per_distance'] ) ? (float) $matched_rule['cost_per_distance'] : 0.0,
-                'calculated_cost'   => round( $rule_cost, 2 ),
-            );
-        } else {
-            $response['rule'] = null;
-        }
-
-        $response['breakdown'] = array(
-            'rule_cost'    => round( $rule_cost, 2 ),
-            'handling_fee' => round( $handling_fee, 2 ),
-            'total'        => $total,
+            'used_fallback'   => $quote['used_fallback'],
+            'rule'            => $quote['rule'],
+            'breakdown'       => array(
+                'rule_cost'    => $quote['rule_cost'],
+                'handling_fee' => $quote['handling_fee'],
+                'total'        => $quote['total'],
+            ),
         );
 
         return rest_ensure_response( $response );

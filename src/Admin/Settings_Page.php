@@ -123,6 +123,33 @@ class Settings_Page {
         );
 
         add_settings_field(
+            'drs_fallback_enabled',
+            __( 'Backup flat rate', 'drs-distance' ),
+            array( $this, 'render_fallback_enabled_field' ),
+            'drs_distance_rate_general',
+            'drs_general_section',
+            array( 'label_for' => 'drs_fallback_enabled' )
+        );
+
+        add_settings_field(
+            'drs_fallback_label',
+            __( 'Backup label', 'drs-distance' ),
+            array( $this, 'render_fallback_label_field' ),
+            'drs_distance_rate_general',
+            'drs_general_section',
+            array( 'label_for' => 'drs_fallback_label' )
+        );
+
+        add_settings_field(
+            'drs_fallback_cost',
+            __( 'Backup cost', 'drs-distance' ),
+            array( $this, 'render_fallback_cost_field' ),
+            'drs_distance_rate_general',
+            'drs_general_section',
+            array( 'label_for' => 'drs_fallback_cost' )
+        );
+
+        add_settings_field(
             'drs_distance_unit',
             __( 'Distance unit', 'drs-distance' ),
             array( $this, 'render_distance_unit_field' ),
@@ -169,6 +196,24 @@ class Settings_Page {
             __( 'Advanced options', 'drs-distance' ),
             array( $this, 'render_advanced_section' ),
             'drs_distance_rate_advanced'
+        );
+
+        add_settings_field(
+            'drs_cache_enabled',
+            __( 'Enable caching', 'drs-distance' ),
+            array( $this, 'render_cache_enabled_field' ),
+            'drs_distance_rate_advanced',
+            'drs_advanced_section',
+            array( 'label_for' => 'drs_cache_enabled' )
+        );
+
+        add_settings_field(
+            'drs_cache_ttl',
+            __( 'Cache duration (minutes)', 'drs-distance' ),
+            array( $this, 'render_cache_ttl_field' ),
+            'drs_distance_rate_advanced',
+            'drs_advanced_section',
+            array( 'label_for' => 'drs_cache_ttl' )
         );
 
         add_settings_field(
@@ -356,6 +401,45 @@ class Settings_Page {
     }
 
     /**
+     * Render the backup flat-rate toggle.
+     */
+    public function render_fallback_enabled_field(): void {
+        $settings = $this->get_settings();
+        $enabled  = isset( $settings['fallback_enabled'] ) ? (string) $settings['fallback_enabled'] : 'no';
+        ?>
+        <label for="drs_fallback_enabled">
+            <input type="checkbox" id="drs_fallback_enabled" name="<?php echo esc_attr( $this->option_name ); ?>[fallback_enabled]" value="yes" <?php checked( 'yes', $enabled ); ?>>
+            <?php esc_html_e( 'Offer a predefined rate when distance providers are unavailable.', 'drs-distance' ); ?>
+        </label>
+        <p class="description"><?php esc_html_e( 'When checked, the backup rate below will be shown if no distance can be calculated.', 'drs-distance' ); ?></p>
+        <?php
+    }
+
+    /**
+     * Render the backup label field.
+     */
+    public function render_fallback_label_field(): void {
+        $settings = $this->get_settings();
+        $value    = isset( $settings['fallback_label'] ) ? (string) $settings['fallback_label'] : '';
+        ?>
+        <input type="text" id="drs_fallback_label" class="regular-text" name="<?php echo esc_attr( $this->option_name ); ?>[fallback_label]" value="<?php echo esc_attr( $value ); ?>">
+        <p class="description"><?php esc_html_e( 'Optional label used when the backup rate is returned.', 'drs-distance' ); ?></p>
+        <?php
+    }
+
+    /**
+     * Render the backup cost field.
+     */
+    public function render_fallback_cost_field(): void {
+        $settings = $this->get_settings();
+        $value    = isset( $settings['fallback_cost'] ) ? (string) $settings['fallback_cost'] : '0.00';
+        ?>
+        <input type="number" id="drs_fallback_cost" min="0" step="0.01" name="<?php echo esc_attr( $this->option_name ); ?>[fallback_cost]" value="<?php echo esc_attr( $value ); ?>" class="small-text">
+        <span class="description"><?php esc_html_e( 'Flat cost applied when the backup rate is used.', 'drs-distance' ); ?></span>
+        <?php
+    }
+
+    /**
      * Render the distance unit selector.
      */
     public function render_distance_unit_field(): void {
@@ -459,6 +543,32 @@ class Settings_Page {
     }
 
     /**
+     * Render the cache toggle field.
+     */
+    public function render_cache_enabled_field(): void {
+        $settings = $this->get_settings();
+        $enabled  = isset( $settings['cache_enabled'] ) ? (string) $settings['cache_enabled'] : 'yes';
+        ?>
+        <label for="drs_cache_enabled">
+            <input type="checkbox" id="drs_cache_enabled" name="<?php echo esc_attr( $this->option_name ); ?>[cache_enabled]" value="yes" <?php checked( 'yes', $enabled ); ?>>
+            <?php esc_html_e( 'Store geocode and distance results for faster calculations.', 'drs-distance' ); ?>
+        </label>
+        <?php
+    }
+
+    /**
+     * Render the cache TTL field.
+     */
+    public function render_cache_ttl_field(): void {
+        $settings = $this->get_settings();
+        $value    = isset( $settings['cache_ttl'] ) ? (int) $settings['cache_ttl'] : 30;
+        ?>
+        <input type="number" id="drs_cache_ttl" min="0" step="1" name="<?php echo esc_attr( $this->option_name ); ?>[cache_ttl]" value="<?php echo esc_attr( $value ); ?>" class="small-text">
+        <span class="description"><?php esc_html_e( 'Cache lifetime in minutes. Use 0 to disable expiration.', 'drs-distance' ); ?></span>
+        <?php
+    }
+
+    /**
      * Render API key field.
      */
     public function render_api_key_field(): void {
@@ -553,6 +663,9 @@ class Settings_Page {
                 $current['default_rate']  = isset( $input['default_rate'] ) ? $this->sanitize_amount( $input['default_rate'] ) : '0.00';
                 $unit                     = isset( $input['distance_unit'] ) ? sanitize_text_field( $input['distance_unit'] ) : 'km';
                 $current['distance_unit'] = in_array( $unit, array( 'km', 'mi' ), true ) ? $unit : 'km';
+                $current['fallback_enabled'] = isset( $input['fallback_enabled'] ) && 'yes' === $input['fallback_enabled'] ? 'yes' : 'no';
+                $current['fallback_label']   = isset( $input['fallback_label'] ) ? sanitize_text_field( $input['fallback_label'] ) : '';
+                $current['fallback_cost']    = isset( $input['fallback_cost'] ) ? $this->sanitize_amount( $input['fallback_cost'] ) : '0.00';
                 break;
 
             case 'rules':
@@ -566,6 +679,9 @@ class Settings_Page {
             case 'advanced':
                 $current['api_key']    = isset( $input['api_key'] ) ? sanitize_text_field( $input['api_key'] ) : '';
                 $current['debug_mode'] = ! empty( $input['debug_mode'] ) && 'yes' === $input['debug_mode'] ? 'yes' : 'no';
+                $current['cache_enabled'] = ! empty( $input['cache_enabled'] ) && 'yes' === $input['cache_enabled'] ? 'yes' : 'no';
+                $ttl = isset( $input['cache_ttl'] ) ? (int) $input['cache_ttl'] : ( $current['cache_ttl'] ?? 30 );
+                $current['cache_ttl'] = max( 0, (int) $ttl );
                 break;
         }
 

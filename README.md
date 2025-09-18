@@ -13,6 +13,8 @@ This project replicates and extends the functionality of [WooCommerce Distance R
 - **Distance Calculation**
   - Straight-line (Haversine formula)
   - Road distance/time (pluggable APIs: Google Maps, Mapbox, etc.)
+  - Configurable geocode & distance caching with TTL controls
+  - Automatic straight-line fallback if the provider fails
 - **Rule Engine**
   - Distance tiers
   - Per-weight, per-item, and subtotal conditions
@@ -22,6 +24,7 @@ This project replicates and extends the functionality of [WooCommerce Distance R
   - Settings tabs: General, Rules, Origins, Advanced
   - Rule editor with CSV/JSON import/export
   - Test calculator for rate previews
+  - Backup flat-rate toggle for emergency coverage
 - **Customer Experience**
   - Accurate shipping rates on Cart/Checkout (classic + Blocks)
   - Optional distance display

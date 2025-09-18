@@ -25,15 +25,22 @@ class Settings {
      */
     public static function get_defaults(): array {
         return array(
-            'enabled'        => 'yes',
-            'method_title'   => __( 'Distance Rate', 'drs-distance' ),
-            'handling_fee'   => '0.00',
-            'default_rate'   => '0.00',
-            'distance_unit'  => 'km',
-            'rules'          => array(),
-            'origins'        => array(),
-            'api_key'        => '',
-            'debug_mode'     => 'no',
+            'enabled'               => 'yes',
+            'method_title'          => __( 'Distance Rate', 'drs-distance' ),
+            'handling_fee'          => '0.00',
+            'default_rate'          => '0.00',
+            'distance_unit'         => 'km',
+            'calculation_strategy'  => 'straight_line',
+            'cache_enabled'         => 'yes',
+            'cache_ttl'             => 30,
+            'fallback_enabled'      => 'no',
+            'fallback_label'        => __( 'Backup rate', 'drs-distance' ),
+            'fallback_cost'         => '0.00',
+            'fallback_distance'     => '0.00',
+            'rules'                 => array(),
+            'origins'               => array(),
+            'api_key'               => '',
+            'debug_mode'            => 'no',
         );
     }
 
