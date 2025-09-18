@@ -26,6 +26,7 @@ class Bootstrap
         add_action('plugins_loaded', [$this, 'load_textdomain']);
         add_filter('woocommerce_shipping_methods', [$this, 'register_shipping_method']);
         add_action('init', [$this, 'wire_admin_blocks_loader']);
+        add_action('init', [$this, 'wire_frontend_blocks_loader']);
         add_action('rest_api_init', [$this, 'wire_rest_blocks_loader']);
     }
 
@@ -90,6 +91,22 @@ class Bootstrap
 
         if (class_exists($class)) {
             $loader = new \DRS\DistanceRateShipping\Blocks\RestLoader();
+            if (method_exists($loader, 'register')) {
+                $loader->register();
+            }
+        }
+    }
+
+    public function wire_frontend_blocks_loader(): void
+    {
+        $class = 'DRS\\DistanceRateShipping\\Blocks\\CheckoutExtension';
+
+        if (! class_exists($class) && is_readable($this->pluginDir . '/src/Blocks/CheckoutExtension.php')) {
+            require_once $this->pluginDir . '/src/Blocks/CheckoutExtension.php';
+        }
+
+        if (class_exists($class)) {
+            $loader = new \DRS\DistanceRateShipping\Blocks\CheckoutExtension($this->pluginFile);
             if (method_exists($loader, 'register')) {
                 $loader->register();
             }

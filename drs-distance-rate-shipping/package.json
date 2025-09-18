@@ -1,0 +1,11 @@
+{
+  "name": "drs-distance-rate-shipping",
+  "private": true,
+  "scripts": {
+    "build": "esbuild assets/ts/blocks/checkout.ts --bundle --target=es2019 --format=iife --outfile=build/blocks/checkout.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.20.2",
+    "typescript": "^5.4.0"
+  }
+}
