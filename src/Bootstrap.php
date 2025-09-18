@@ -42,6 +42,7 @@ class Bootstrap {
     public function init(): void {
         $this->maybe_define_constants();
 
+        add_action( 'before_woocommerce_init', array( $this, 'declare_woocommerce_compatibility' ) );
         add_action( 'init', array( $this, 'load_textdomain' ) );
         add_action( 'woocommerce_shipping_init', array( $this, 'include_shipping_method' ) );
         add_filter( 'woocommerce_shipping_methods', array( $this, 'register_shipping_method' ) );
@@ -50,6 +51,21 @@ class Bootstrap {
         if ( is_admin() ) {
             $this->boot_admin();
         }
+    }
+
+    /**
+     * Declare compatibility with WooCommerce High Performance Order Storage.
+     */
+    public function declare_woocommerce_compatibility(): void {
+        if ( ! class_exists( '\\Automattic\\WooCommerce\\Utilities\\FeaturesUtil' ) ) {
+            return;
+        }
+
+        \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility(
+            'custom_order_tables',
+            $this->plugin_file,
+            true
+        );
     }
 
     /**
