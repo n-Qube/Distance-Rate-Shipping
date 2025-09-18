@@ -5,11 +5,13 @@
  * @package DRS\Shipping
  */
 
+declare(strict_types=1);
+
 namespace DRS\Shipping;
 
 use WC_Shipping_Method;
 
-if ( ! class_exists( __NAMESPACE__ . '\\Method' ) ) {
+if ( class_exists( 'WC_Shipping_Method', false ) && ! class_exists( __NAMESPACE__ . '\\Method', false ) ) {
     /**
      * Distance Rate Shipping method implementation.
      */
@@ -121,4 +123,8 @@ if ( ! class_exists( __NAMESPACE__ . '\\Method' ) ) {
             return $this->id;
         }
     }
+}
+
+if ( class_exists( __NAMESPACE__ . '\\Method', false ) && ! class_exists( 'DRS\\DistanceRateShipping\\Shipping\\DistanceRateMethod', false ) ) {
+    class_alias( __NAMESPACE__ . '\\Method', 'DRS\\DistanceRateShipping\\Shipping\\DistanceRateMethod' );
 }
