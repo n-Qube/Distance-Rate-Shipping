@@ -10,8 +10,8 @@ declare( strict_types=1 );
 namespace DRS\DistanceRateShipping;
 
 use DRS\Admin\Settings_Page;
+use DRS\Admin\Status_Widget;
 use DRS\Rest\Quote_Controller;
-use DRS\Settings\Settings;
 
 /**
  * Bootstrap class wires all plugin functionality.
@@ -26,6 +26,11 @@ class Bootstrap {
      * Cached admin page instance.
      */
     private ?Settings_Page $settings_page = null;
+
+    /**
+     * Cached status widget instance.
+     */
+    private ?Status_Widget $status_widget = null;
 
     /**
      * Constructor.
@@ -76,6 +81,8 @@ class Bootstrap {
      * Load the shipping method implementation.
      */
     public function include_shipping_method(): void {
+        $this->include_common_classes();
+
         $method_class = '\\DRS\\Shipping\\Method';
 
         if ( class_exists( $method_class, false ) ) {
@@ -127,6 +134,21 @@ class Bootstrap {
             $this->settings_page = new Settings_Page( $this->plugin_file );
             $this->settings_page->init();
         }
+
+        $widget_class = '\\DRS\\Admin\\Status_Widget';
+
+        if ( ! class_exists( $widget_class, false ) ) {
+            $widget_file = dirname( $this->plugin_file ) . '/src/Admin/Status_Widget.php';
+
+            if ( is_readable( $widget_file ) ) {
+                require_once $widget_file;
+            }
+        }
+
+        if ( class_exists( $widget_class ) ) {
+            $this->status_widget = new Status_Widget();
+            $this->status_widget->init();
+        }
     }
 
     /**
@@ -157,14 +179,22 @@ class Bootstrap {
     private function include_common_classes(): void {
         $settings_class = '\\DRS\\Settings\\Settings';
 
-        if ( class_exists( $settings_class, false ) ) {
-            return;
+        if ( ! class_exists( $settings_class, false ) ) {
+            $file = dirname( $this->plugin_file ) . '/src/Settings/Settings.php';
+
+            if ( is_readable( $file ) ) {
+                require_once $file;
+            }
         }
 
-        $file = dirname( $this->plugin_file ) . '/src/Settings/Settings.php';
+        $logger_class = '\\DRS\\Support\\Logger';
 
-        if ( is_readable( $file ) ) {
-            require_once $file;
+        if ( ! class_exists( $logger_class, false ) ) {
+            $logger_file = dirname( $this->plugin_file ) . '/Support/Logger.php';
+
+            if ( is_readable( $logger_file ) ) {
+                require_once $logger_file;
+            }
         }
     }
 }

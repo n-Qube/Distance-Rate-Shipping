@@ -10,13 +10,19 @@ declare( strict_types=1 );
 namespace DRS\Rest;
 
 use DRS\Settings\Settings;
+use DRS\Support\Logger;
 use WP_Error;
 use WP_REST_Request;
+use function apply_filters;
+use function __;
 use function register_rest_route;
 use function current_user_can;
 use function rest_authorization_required_code;
 use function rest_ensure_response;
 use function sanitize_text_field;
+use function get_transient;
+use function set_transient;
+use function wp_json_encode;
 
 /**
  * Handles the /drs/v1/quote endpoint.
@@ -87,9 +93,35 @@ class Quote_Controller {
         $rules        = $settings['rules'];
         $handling_fee = isset( $settings['handling_fee'] ) ? (float) $settings['handling_fee'] : 0.0;
         $default_rate = isset( $settings['default_rate'] ) ? (float) $settings['default_rate'] : 0.0;
+        $provider     = $this->determine_provider( $settings );
 
-        $matched_rule = null;
-        $rule_cost    = $default_rate;
+        $cache_hit = false;
+        $cache_key = null;
+
+        if ( $this->is_cache_enabled( $settings ) ) {
+            $cache_key = $this->build_cache_key( $settings, $distance, $weight, $items, $subtotal, $origin, $destination );
+            $cached    = get_transient( $cache_key );
+
+            if ( is_array( $cached ) && isset( $cached['response'] ) ) {
+                $cache_hit = true;
+
+                Logger::debug(
+                    __( 'Distance Rate quote served from cache.', 'drs-distance' ),
+                    array(
+                        'provider'        => $provider,
+                        'cache_hit'       => true,
+                        'selected_rule'   => $cached['selected_rule'] ?? null,
+                        'cost_components' => $cached['cost_components'] ?? array(),
+                    ),
+                    $settings
+                );
+
+                return rest_ensure_response( $cached['response'] );
+            }
+        }
+
+        $selected_rule = null;
+        $rule_cost     = $default_rate;
 
         foreach ( $rules as $rule ) {
             if ( ! is_array( $rule ) ) {
@@ -108,15 +140,29 @@ class Quote_Controller {
                 continue;
             }
 
-            $matched_rule = $rule;
             $base_cost    = isset( $rule['base_cost'] ) ? (float) $rule['base_cost'] : 0.0;
             $per_distance = isset( $rule['cost_per_distance'] ) ? (float) $rule['cost_per_distance'] : 0.0;
 
             $rule_cost = $base_cost + ( $per_distance * $distance );
+            $selected_rule = array(
+                'id'                => isset( $rule['id'] ) ? (string) $rule['id'] : '',
+                'label'             => isset( $rule['label'] ) ? (string) $rule['label'] : '',
+                'min_distance'      => $min_distance,
+                'max_distance'      => $max_distance,
+                'base_cost'         => $base_cost,
+                'cost_per_distance' => $per_distance,
+                'calculated_cost'   => round( $rule_cost, 2 ),
+            );
             break;
         }
 
         $total = round( $rule_cost + $handling_fee, 2 );
+
+        $cost_components = array(
+            'rule_cost'    => round( $rule_cost, 2 ),
+            'handling_fee' => round( $handling_fee, 2 ),
+            'total'        => $total,
+        );
 
         $response = array(
             'origin'          => $origin,
@@ -130,29 +176,37 @@ class Quote_Controller {
             'default_rate'    => round( $default_rate, 2 ),
             'total'           => $total,
             'currency_symbol' => Settings::get_currency_symbol(),
-            'used_fallback'   => null === $matched_rule,
+            'used_fallback'   => null === $selected_rule,
         );
 
-        if ( null !== $matched_rule ) {
-            $max_raw = $matched_rule['max_distance'] ?? '';
+        $response['rule']       = $selected_rule;
+        $response['breakdown']  = $cost_components;
 
-            $response['rule'] = array(
-                'id'                => isset( $matched_rule['id'] ) ? (string) $matched_rule['id'] : '',
-                'label'             => isset( $matched_rule['label'] ) ? (string) $matched_rule['label'] : '',
-                'min_distance'      => isset( $matched_rule['min_distance'] ) ? (float) $matched_rule['min_distance'] : 0.0,
-                'max_distance'      => '' === $max_raw || null === $max_raw ? null : (float) $max_raw,
-                'base_cost'         => isset( $matched_rule['base_cost'] ) ? (float) $matched_rule['base_cost'] : 0.0,
-                'cost_per_distance' => isset( $matched_rule['cost_per_distance'] ) ? (float) $matched_rule['cost_per_distance'] : 0.0,
-                'calculated_cost'   => round( $rule_cost, 2 ),
-            );
-        } else {
-            $response['rule'] = null;
+        if ( null !== $cache_key ) {
+            $ttl = $this->get_cache_ttl( $settings );
+
+            if ( $ttl > 0 ) {
+                set_transient(
+                    $cache_key,
+                    array(
+                        'response'        => $response,
+                        'selected_rule'   => $selected_rule,
+                        'cost_components' => $cost_components,
+                    ),
+                    $ttl
+                );
+            }
         }
 
-        $response['breakdown'] = array(
-            'rule_cost'    => round( $rule_cost, 2 ),
-            'handling_fee' => round( $handling_fee, 2 ),
-            'total'        => $total,
+        Logger::debug(
+            __( 'Distance Rate quote calculated.', 'drs-distance' ),
+            array(
+                'provider'        => $provider,
+                'cache_hit'       => $cache_hit,
+                'selected_rule'   => $selected_rule,
+                'cost_components' => $cost_components,
+            ),
+            $settings
         );
 
         return rest_ensure_response( $response );
@@ -230,5 +284,98 @@ class Quote_Controller {
         }
 
         return max( 0, (int) $value );
+    }
+
+    /**
+     * Determine the provider label used for logging.
+     *
+     * @param array<string, mixed> $settings Stored plugin settings.
+     */
+    private function determine_provider( array $settings ): string {
+        $provider = '';
+
+        if ( isset( $settings['strategy'] ) && is_string( $settings['strategy'] ) ) {
+            $provider = $settings['strategy'];
+        } elseif ( isset( $settings['api_key'] ) && '' !== (string) $settings['api_key'] ) {
+            $provider = 'api';
+        }
+
+        if ( '' === $provider ) {
+            $provider = 'straight_line';
+        }
+
+        if ( function_exists( 'apply_filters' ) ) {
+            $provider = (string) apply_filters( 'drs_quote_provider', $provider, $settings );
+        }
+
+        return $provider;
+    }
+
+    /**
+     * Check if transient caching is enabled.
+     *
+     * @param array<string, mixed> $settings Stored plugin settings.
+     */
+    private function is_cache_enabled( array $settings ): bool {
+        $enabled = true;
+
+        if ( function_exists( 'apply_filters' ) ) {
+            $enabled = (bool) apply_filters( 'drs_quote_cache_enabled', $enabled, $settings );
+        }
+
+        return $enabled;
+    }
+
+    /**
+     * Resolve cache lifetime in seconds.
+     *
+     * @param array<string, mixed> $settings Stored plugin settings.
+     */
+    private function get_cache_ttl( array $settings ): int {
+        $default = defined( 'MINUTE_IN_SECONDS' ) ? 5 * (int) MINUTE_IN_SECONDS : 300;
+
+        if ( function_exists( 'apply_filters' ) ) {
+            $filtered = apply_filters( 'drs_quote_cache_ttl', $default, $settings );
+            $ttl      = (int) $filtered;
+
+            return $ttl > 0 ? $ttl : $default;
+        }
+
+        return $default;
+    }
+
+    /**
+     * Generate a cache key for the current request context.
+     *
+     * @param array<string, mixed> $settings Stored plugin settings.
+     */
+    private function build_cache_key(
+        array $settings,
+        float $distance,
+        float $weight,
+        int $items,
+        float $subtotal,
+        string $origin,
+        string $destination
+    ): string {
+        $payload = array(
+            'distance'      => $distance,
+            'weight'        => $weight,
+            'items'         => $items,
+            'subtotal'      => $subtotal,
+            'origin'        => $origin,
+            'destination'   => $destination,
+            'handling_fee'  => $settings['handling_fee'] ?? '0.00',
+            'default_rate'  => $settings['default_rate'] ?? '0.00',
+            'rules_version' => md5( (string) wp_json_encode( $settings['rules'] ?? array() ) ),
+        );
+
+        $encoded = wp_json_encode( $payload );
+
+        if ( ! is_string( $encoded ) ) {
+            $encoded = serialize( $payload );
+        }
+
+        return 'drs_quote_' . md5( $encoded );
     }
 }
