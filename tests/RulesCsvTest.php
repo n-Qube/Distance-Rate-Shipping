@@ -65,6 +65,39 @@ function getRuleByName(array $rules, string $name): ?array
     return null;
 }
 
+function runGeneralOptionsBooleanTest(): void
+{
+    $store = [];
+
+    $options = new Options(
+        static function (string $key, $default = false) use (&$store) {
+            return $store[$key] ?? $default;
+        },
+        static function (string $key, $value) use (&$store): bool {
+            $store[$key] = $value;
+
+            return true;
+        },
+        static function (string $key) use (&$store): bool {
+            if (array_key_exists($key, $store)) {
+                unset($store[$key]);
+            }
+
+            return true;
+        }
+    );
+
+    $result = $options->save_general(['show_distance' => 'no']);
+
+    assertSameValue(false, $result['show_distance'], 'General options should treat "no" as boolean false.');
+    assertSameValue(false, $store[Options::GENERAL_OPTION_KEY]['show_distance'], 'Stored options should persist "no" as false.');
+
+    $result = $options->save_general(['show_distance' => '0']);
+
+    assertSameValue(false, $result['show_distance'], 'General options should treat "0" as boolean false.');
+    assertSameValue(false, $store[Options::GENERAL_OPTION_KEY]['show_distance'], 'Stored options should persist "0" as false.');
+}
+
 function runRoundTripTest(): void
 {
     $options = new Options(
@@ -354,6 +387,7 @@ function runMergeTest(): void
     assertSameValue($existing[1], $legacy, 'Legacy rule should remain unchanged.');
 }
 
+runGeneralOptionsBooleanTest();
 runRoundTripTest();
 runMergeTest();
 
