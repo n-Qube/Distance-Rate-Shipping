@@ -23,41 +23,82 @@ if ( is_readable( $drs_autoload ) ) {
     require_once $drs_autoload;
 }
 
-$drs_shipping_file  = __DIR__ . '/src/Shipping/Method.php';
-$drs_shipping_class = 'DRS\\Shipping\\Method';
+if ( ! defined( 'DRS_DISTANCE_RATE_SHIPPING_METHOD_FILE' ) ) {
+    define( 'DRS_DISTANCE_RATE_SHIPPING_METHOD_FILE', __DIR__ . '/src/Shipping/Method.php' );
+}
 
-$drs_require_shipping_method = static function () use ( $drs_shipping_file, $drs_shipping_class ): bool {
-    if ( class_exists( $drs_shipping_class, false ) ) {
-        return true;
+if ( ! defined( 'DRS_DISTANCE_RATE_SHIPPING_METHOD_CLASS' ) ) {
+    define( 'DRS_DISTANCE_RATE_SHIPPING_METHOD_CLASS', 'DRS\\Shipping\\Method' );
+}
+
+if ( ! defined( 'DRS_DISTANCE_RATE_SHIPPING_METHOD_ALIAS' ) ) {
+    define( 'DRS_DISTANCE_RATE_SHIPPING_METHOD_ALIAS', 'DRS\\DistanceRateShipping\\Shipping\\DistanceRateMethod' );
+}
+
+if ( ! function_exists( 'drs_distance_rate_shipping_load_textdomain' ) ) {
+    /**
+     * Load the plugin text domain.
+     */
+    function drs_distance_rate_shipping_load_textdomain(): void {
+        load_plugin_textdomain(
+            'drs-distance',
+            false,
+            dirname( plugin_basename( DRS_DISTANCE_RATE_SHIPPING_FILE ) ) . '/languages'
+        );
     }
+}
 
-    if ( ! class_exists( 'WC_Shipping_Method', false ) ) {
-        return false;
+if ( ! function_exists( 'drs_distance_rate_shipping_require_method' ) ) {
+    /**
+     * Ensure the shipping method implementation is loaded.
+     *
+     * @return bool True when the shipping method class is available.
+     */
+    function drs_distance_rate_shipping_require_method(): bool {
+        if ( class_exists( DRS_DISTANCE_RATE_SHIPPING_METHOD_CLASS, false ) ) {
+            return true;
+        }
+
+        if ( class_exists( DRS_DISTANCE_RATE_SHIPPING_METHOD_ALIAS, false ) ) {
+            if ( ! class_exists( DRS_DISTANCE_RATE_SHIPPING_METHOD_CLASS, false ) ) {
+                class_alias(
+                    DRS_DISTANCE_RATE_SHIPPING_METHOD_ALIAS,
+                    DRS_DISTANCE_RATE_SHIPPING_METHOD_CLASS
+                );
+            }
+
+            return true;
+        }
+
+        if ( ! class_exists( 'WC_Shipping_Method', false ) ) {
+            return false;
+        }
+
+        if ( is_readable( DRS_DISTANCE_RATE_SHIPPING_METHOD_FILE ) ) {
+            require_once DRS_DISTANCE_RATE_SHIPPING_METHOD_FILE;
+        }
+
+        return class_exists( DRS_DISTANCE_RATE_SHIPPING_METHOD_CLASS, false );
     }
+}
 
-    if ( is_readable( $drs_shipping_file ) ) {
-        require_once $drs_shipping_file;
-    }
-
-    return class_exists( $drs_shipping_class, false );
-};
-
-add_action(
-    'plugins_loaded',
-    static function (): void {
-        load_plugin_textdomain( 'drs-distance', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
-    }
-);
-
-add_action( 'woocommerce_shipping_init', $drs_require_shipping_method );
-
-add_filter(
-    'woocommerce_shipping_methods',
-    static function ( array $methods ) use ( $drs_require_shipping_method, $drs_shipping_class ): array {
-        $drs_require_shipping_method();
-
-        $methods['drs_distance_rate'] = $drs_shipping_class;
+if ( ! function_exists( 'drs_distance_rate_shipping_register_method' ) ) {
+    /**
+     * Register the Distance Rate shipping method with WooCommerce.
+     *
+     * @param array $methods Registered WooCommerce shipping methods.
+     *
+     * @return array
+     */
+    function drs_distance_rate_shipping_register_method( array $methods ): array {
+        if ( drs_distance_rate_shipping_require_method() ) {
+            $methods['drs_distance_rate'] = DRS_DISTANCE_RATE_SHIPPING_METHOD_CLASS;
+        }
 
         return $methods;
     }
-);
+}
+
+add_action( 'plugins_loaded', 'drs_distance_rate_shipping_load_textdomain' );
+add_action( 'woocommerce_shipping_init', 'drs_distance_rate_shipping_require_method' );
+add_filter( 'woocommerce_shipping_methods', 'drs_distance_rate_shipping_register_method' );

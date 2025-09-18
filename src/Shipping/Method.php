@@ -125,6 +125,10 @@ if ( class_exists( 'WC_Shipping_Method', false ) && ! class_exists( __NAMESPACE_
     }
 }
 
-if ( class_exists( __NAMESPACE__ . '\\Method', false ) && ! class_exists( 'DRS\\DistanceRateShipping\\Shipping\\DistanceRateMethod', false ) ) {
-    class_alias( __NAMESPACE__ . '\\Method', 'DRS\\DistanceRateShipping\\Shipping\\DistanceRateMethod' );
+$drs_distance_rate_alias = defined( 'DRS_DISTANCE_RATE_SHIPPING_METHOD_ALIAS' )
+    ? constant( 'DRS_DISTANCE_RATE_SHIPPING_METHOD_ALIAS' )
+    : 'DRS\\DistanceRateShipping\\Shipping\\DistanceRateMethod';
+
+if ( class_exists( __NAMESPACE__ . '\\Method', false ) && ! class_exists( $drs_distance_rate_alias, false ) ) {
+    class_alias( __NAMESPACE__ . '\\Method', $drs_distance_rate_alias );
 }
