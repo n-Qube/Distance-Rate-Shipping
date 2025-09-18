@@ -1,0 +1,11 @@
+{
+    "name": "drs/distance-rate-shipping",
+    "description": "Distance Rate Shipping plugin for WordPress.",
+    "type": "wordpress-plugin",
+    "license": "GPL-2.0-or-later",
+    "autoload": {
+        "psr-4": {
+            "DRS\\\\DistanceRateShipping\\\\": "src/"
+        }
+    }
+}
