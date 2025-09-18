@@ -26,18 +26,20 @@ if ( is_readable( $drs_autoload ) ) {
 $drs_shipping_file  = __DIR__ . '/src/Shipping/Method.php';
 $drs_shipping_class = 'DRS\\Shipping\\Method';
 
-$drs_require_shipping_method = static function () use ( $drs_shipping_file, $drs_shipping_class ): void {
+$drs_require_shipping_method = static function () use ( $drs_shipping_file, $drs_shipping_class ): bool {
     if ( class_exists( $drs_shipping_class, false ) ) {
-        return;
+        return true;
     }
 
     if ( ! class_exists( 'WC_Shipping_Method', false ) ) {
-        return;
+        return false;
     }
 
     if ( is_readable( $drs_shipping_file ) ) {
         require_once $drs_shipping_file;
     }
+
+    return class_exists( $drs_shipping_class, false );
 };
 
 add_action(
@@ -54,9 +56,7 @@ add_filter(
     static function ( array $methods ) use ( $drs_require_shipping_method, $drs_shipping_class ): array {
         $drs_require_shipping_method();
 
-        if ( class_exists( $drs_shipping_class, false ) ) {
-            $methods['drs_distance_rate'] = $drs_shipping_class;
-        }
+        $methods['drs_distance_rate'] = $drs_shipping_class;
 
         return $methods;
     }
