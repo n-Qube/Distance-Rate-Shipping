@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace DRS\Support;
 
+require_once __DIR__ . '/RulesCsv.php';
+
 use InvalidArgumentException;
 
 /**
@@ -392,6 +394,33 @@ class Options
     public function delete_rules(): bool
     {
         return (bool) ($this->deleteOptionCallback)(self::RULES_OPTION_KEY);
+    }
+
+    /**
+     * Exports the current rule collection as CSV.
+     */
+    public function export_rules_csv(): string
+    {
+        $codec = new RulesCsv();
+
+        return $codec->export($this->get_rules());
+    }
+
+    /**
+     * Imports rules from CSV, optionally merging with existing ones.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function import_rules_csv(string $csv, bool $mergeExisting = true): array
+    {
+        $codec = new RulesCsv();
+        $existing = $mergeExisting ? $this->get_rules() : [];
+
+        $rules = $codec->import($csv, $existing);
+
+        $this->persist_rules($rules);
+
+        return $rules;
     }
 
     /**
