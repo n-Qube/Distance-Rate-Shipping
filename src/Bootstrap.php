@@ -46,6 +46,7 @@ class Bootstrap {
         add_action( 'woocommerce_shipping_init', array( $this, 'include_shipping_method' ) );
         add_filter( 'woocommerce_shipping_methods', array( $this, 'register_shipping_method' ) );
         add_action( 'rest_api_init', array( $this, 'register_rest_routes' ) );
+        $this->register_blocks_extension();
 
         if ( is_admin() ) {
             $this->boot_admin();
@@ -148,6 +149,26 @@ class Bootstrap {
         if ( class_exists( $controller_class ) ) {
             $controller = new Quote_Controller();
             $controller->register_routes();
+        }
+    }
+
+    /**
+     * Register WooCommerce Blocks integrations.
+     */
+    private function register_blocks_extension(): void {
+        $class = '\\DRS\\Blocks\\CheckoutExtension';
+
+        if ( ! class_exists( $class, false ) ) {
+            $file = dirname( $this->plugin_file ) . '/src/Blocks/CheckoutExtension.php';
+
+            if ( is_readable( $file ) ) {
+                require_once $file;
+            }
+        }
+
+        if ( class_exists( $class ) ) {
+            $extension = new \DRS\Blocks\CheckoutExtension( $this->plugin_file );
+            $extension->register();
         }
     }
 
