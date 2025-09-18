@@ -555,6 +555,34 @@ class Options
 
         switch ($type) {
             case 'boolean':
+                if (is_bool($value)) {
+                    // Already a boolean value, no casting necessary.
+                    break;
+                }
+
+                if (is_array($value)) {
+                    $value = !empty($value);
+                    break;
+                }
+
+                if (is_int($value) || is_float($value)) {
+                    $value = (bool) $value;
+                    break;
+                }
+
+                if (is_string($value)) {
+                    $normalised = strtolower(trim($value));
+                    $falseStrings = ['', '0', 'false', 'no', 'off'];
+
+                    if (in_array($normalised, $falseStrings, true)) {
+                        $value = false;
+                        break;
+                    }
+
+                    $value = $normalised !== '';
+                    break;
+                }
+
                 $value = (bool) $value;
                 break;
             case 'string':
